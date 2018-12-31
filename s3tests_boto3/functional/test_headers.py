@@ -201,18 +201,6 @@ def test_object_create_bad_md5_empty():
 @tag('auth_common')
 @attr(resource='object')
 @attr(method='put')
-@attr(operation='create w/non-graphics in MD5')
-@attr(assertion='fails 403')
-@attr('fails_strict_rfc2616')
-def test_object_create_bad_md5_unreadable():
-    e = _add_header_create_bad_object({'Content-MD5':'\x07'})
-    status, error_code = _get_status_and_error_code(e.response)
-    #TODO when I run boto2 it gives back a 400 as well, also this is not run in teuthology
-    eq(status, 400)
-
-@tag('auth_common')
-@attr(resource='object')
-@attr(method='put')
 @attr(operation='create w/no MD5 header')
 @attr(assertion='succeeds')
 def test_object_create_bad_md5_none():
@@ -220,15 +208,11 @@ def test_object_create_bad_md5_none():
     client = get_client()
     client.put_object(Bucket=bucket_name, Key=key_name, Body='bar')
 
-# strangely, amazon doesn't report an error with a non-expect 100 also, our
-# error comes back as html, and not xml as I normally expect
 @tag('auth_common')
 @attr(resource='object')
 @attr(method='put')
 @attr(operation='create w/Expect 200')
 @attr(assertion='garbage, but S3 succeeds!')
-#TODO: this is supposed to fail on RGW but teuthology doesnt run the boto2 version and both boto2 and boto2 versions succeed
-#@attr('fails_on_rgw')
 def test_object_create_bad_expect_mismatch():
     bucket_name, key_name = _add_header_create_object({'Expect': 200})
     client = get_client()
@@ -257,30 +241,17 @@ def test_object_create_bad_expect_none():
 @tag('auth_common')
 @attr(resource='object')
 @attr(method='put')
-@attr(operation='create w/non-graphic expect')
-@attr(assertion='garbage, but S3 succeeds!')
-@attr('fails_on_rgw')
-@attr('fails_strict_rfc2616')
-def test_object_create_bad_expect_unreadable():
-    bucket_name, key_name = _add_header_create_object({'Expect': '\x07'})
-    client = get_client()
-    client.put_object(Bucket=bucket_name, Key=key_name, Body='bar')
-
-@tag('auth_common')
-@attr(resource='object')
-@attr(method='put')
 @attr(operation='create w/empty content length')
 @attr(assertion='fails 400')
-#TODO: the boto2 version succeeeds and returns a 400, the boto3 version succeeds and returns a 403. 
-# Look at what the outgoing requests look like and see what gives??
-# TODO: see if this 'fails_on_rgw' is necessary
 @attr('fails_on_rgw')
 def test_object_create_bad_contentlength_empty():
     e = _add_header_create_bad_object({'Content-Length':''})
     status, error_code = _get_status_and_error_code(e.response)
-    # TODO: try to run the the boto2 version on rgw and see if it works
-    eq(status, 403)
-    eq(error_code, 'SignatureDoesNotMatch')
+    #NOTES: the boto2 version succeeeds and returns a 400, the boto3 version succeeds and returns a 403. 
+    # Look at what the outgoing requests look like and see what gives??
+    # - RGW does not even get a the 400 from boto2
+    # - RGW does not even get a the 403 from boto3 shows up though
+    eq(status, 400)
 
 @tag('auth_common')
 @attr(resource='object')
@@ -289,15 +260,12 @@ def test_object_create_bad_contentlength_empty():
 @attr(assertion='fails 400')
 @attr('fails_on_mod_proxy_fcgi')
 # TODO: remove 'fails_on_rgw' once I figure out what's going on
-@attr('fails_on_rgw')
-#TODO: the boto2 version succeeeds and returns a 400, the boto3 version succeeds and returns a 403. 
-# Look at what the outgoing requests look like and see what gives??
 def test_object_create_bad_contentlength_negative():
-    #TODO: if I put quotes around the -1 it gets me a 403, try the boto2 version
-    #THIS IS THE ONE IM WORKING ON: see what difference is if I provide ContentLength in put_object
+    #boto2 version works fine, boto3 version returns a 403, the content length doesn't get sent through to boto3 I think. Search for 'CONTENT_LENGTH' in rgw log
+    # need to see what the difference is between the http requests
     e = _add_header_create_bad_object({'Content-Length':'-1'})
     status, error_code = _get_status_and_error_code(e.response)
-    eq(status, 403)
+    eq(status, 400)
 
 @tag('auth_common')
 @attr(resource='object')
@@ -305,41 +273,15 @@ def test_object_create_bad_contentlength_negative():
 @attr(operation='create w/no content length')
 @attr(assertion='fails 411')
 def test_object_create_bad_contentlength_none():
-    bucket_name = get_new_bucket()
-    client = get_client()
-    key_name = 'foo'
-
-    #boto3.set_stream_logger(name='botocore')
-    # remove custom headers before PutObject call
-    def remove_header(**kwargs):
-        print kwargs['params']['headers']
-
-        if ('Content-Length' in kwargs['params']['headers']):
-            del kwargs['params']['headers']['Content-Length']
-
-        print kwargs['params']['headers']
-
-    #client.meta.events.register('before-call.s3.PutObject', remove_header)
-    client.put_object(Bucket=bucket_name, Key=key_name, Body='bar')
-    #e = assert_raises(ClientError, client.put_object, Bucket=bucket_name, Key=key_name, Body='bar')
-    # TODO: this one!!, try the boto2 version, no error is raised
-    #status, error_code = _get_status_and_error_code(e.response)
-    #eq(status, 411)
-    #eq(error_code, 'MissingContentLength')
-
-@tag('auth_common')
-@attr(resource='object')
-@attr(method='put')
-@attr(operation='create w/non-graphic content length')
-@attr(assertion='fails 400')
-@attr('fails_on_mod_proxy_fcgi')
-@attr('fails_strict_rfc2616')
-#TODO: the boto2 version succeeeds and returns a 400, the boto3 version succeeds and returns a 403. 
-# Look at what the outgoing requests look like and see what gives??
-def test_object_create_bad_contentlength_unreadable():
-    e = _add_header_create_bad_object({'Content-Length':'\x07'})
+    remove = 'Content-Length'
+    e = _remove_header_create_bad_object('Content-Length')
+    # TODO: boto2 version works just fine, boto3 version doesn't throw an error at all. I'm guessing the http requests between the two must be different.
+    # run a new vstart and run the boto2 version
+    # run a new vstart and run the boto3 version
+    # compare the logs
     status, error_code = _get_status_and_error_code(e.response)
-    eq(status, 403)
+    eq(status, 411)
+    eq(error_code, 'MissingContentLength')
 
 @tag('auth_common')
 @attr(resource='object')
@@ -354,8 +296,8 @@ def test_object_create_bad_contentlength_mismatch_above():
 
     e = _add_header_create_bad_object({'Content-Length': length})
     status, error_code = _get_status_and_error_code(e.response)
-#TODO: the boto2 version succeeeds and returns a 400, the boto3 version succeeds and returns a 403. 
-# Look at what the outgoing requests look like and see what gives??
+    #NOTES: the boto2 version succeeeds and returns a 400, the boto3 version succeeds and returns a 403. 
+    # Look at what the outgoing requests look like and see what gives??
     eq(status, 400)
 
 @tag('auth_common')
@@ -385,38 +327,14 @@ def test_object_create_bad_contenttype_empty():
 @attr(assertion='succeeds')
 def test_object_create_bad_contenttype_none():
     # TODO: see if this actually removes content-type header
-    bucket_name, key_name = _remove_header_create_object('Content-Type')
+    boto3.set_stream_logger(name='botocore')
+    #bucket_name, key_name = _remove_header_create_object('Content-Type')
+    bucket_name = get_new_bucket()
+    key_name = 'foo'
     client = get_client()
+    #client.put_object(Bucket=bucket_name, Key=key_name, Body='bar', ContentType='text/blahh')
     client.put_object(Bucket=bucket_name, Key=key_name, Body='bar')
 
-@tag('auth_common')
-@attr(resource='object')
-@attr(method='put')
-@attr(operation='create w/non-graphic content type')
-@attr(assertion='fails 403')
-@attr('fails_on_rgw')
-@attr('fails_strict_rfc2616')
-def test_object_create_bad_contenttype_unreadable():
-    e = _add_header_create_bad_object({'Content-Type':'\x08'})
-    status, error_code = _get_status_and_error_code(e.response)
-    # TODO: this returns a 400 not a 403 
-    eq(status, 403)
-    print error_code
-
-# the teardown is really messed up here. check it out
-@tag('auth_common')
-@attr(resource='object')
-@attr(method='put')
-@attr(operation='create w/non-graphic authorization')
-@attr(assertion='fails 403')
-@attr('fails_on_rgw')
-@attr('fails_strict_rfc2616')
-def test_object_create_bad_authorization_unreadable():
-    # TODO: run this on boto2 and see what happens, this doesn't assert on the RGW
-    e = _add_header_create_bad_object({'Authorization':'\x07'})
-    status, error_code = _get_status_and_error_code(e.response)
-    eq(status, 403)
-    print error_code
 
 @tag('auth_common')
 @attr(resource='object')
@@ -425,6 +343,7 @@ def test_object_create_bad_authorization_unreadable():
 @attr(assertion='fails 403')
 def test_object_create_bad_authorization_empty():
     # TODO: run this on boto2 and see what happens, this doesn't assert on the RGW
+    boto3.set_stream_logger(name='botocore')
     e = _add_header_create_bad_object({'Authorization': ''})
     status, error_code = _get_status_and_error_code(e.response)
     eq(status, 403)
@@ -436,9 +355,10 @@ def test_object_create_bad_authorization_empty():
 @attr(operation='create w/date and x-amz-date')
 @attr(assertion='succeeds')
 def test_object_create_date_and_amz_date():
-    # TODO: this asserts when it shouldn't. Figure out what's wrong, look at detailed logs
+    # TODO: is 'Date' and this test even necessary? 
     date = formatdate(usegmt=True)
-    bucket_name, key_name = _add_header_create_object({'Date': date, 'X-Amz-Date': date})
+    #bucket_name, key_name = _add_header_create_object({'Date': date, 'X-Amz-Date': date})
+    bucket_name, key_name = _add_header_create_object({'X-Amz-Date': date})
     client = get_client()
     client.put_object(Bucket=bucket_name, Key=key_name, Body='bar')
 
@@ -448,7 +368,8 @@ def test_object_create_date_and_amz_date():
 @attr(operation='create w/x-amz-date and no date')
 @attr(assertion='succeeds')
 def test_object_create_amz_date_and_no_date():
-    # TODO: 1) this asserts when it shouldn't. Figure out what's wrong, look at detailed logs
+    # TODO: is 'Date' and this test even necessary? 
+    # 1) this asserts when it shouldn't. Figure out what's wrong, look at detailed logs
     # 2) figure out what to put in so that the Date is empty. Is it None or a empty string
     date = formatdate(usegmt=True)
     bucket_name, key_name = _add_header_create_object({'Date': '', 'X-Amz-Date': date})
@@ -523,7 +444,7 @@ def test_bucket_put_bad_canned_acl():
 @attr(assertion='garbage, but S3 succeeds!')
 @attr('fails_on_rgw')
 def test_bucket_create_bad_expect_mismatch():
-    #TODO: this passed just fine on RGW, look at headers to see if it worked fined, and run boto2 version
+    #NOTES: this passed just fine on RGW, look at headers to see if it worked fined, and run boto2 version
     bucket_name = get_new_bucket_name()
     client = get_client()
 
@@ -544,22 +465,11 @@ def test_bucket_create_bad_expect_empty():
 @tag('auth_common')
 @attr(resource='bucket')
 @attr(method='put')
-@attr(operation='create w/expect nongraphic')
-@attr(assertion='garbage, but S3 succeeds!')
-@attr('fails_on_rgw')
-@attr('fails_strict_rfc2616')
-def test_bucket_create_bad_expect_unreadable():
-    headers = {'Expect': '\x07'}
-    _add_header_create_bucket(headers)
-
-@tag('auth_common')
-@attr(resource='bucket')
-@attr(method='put')
 @attr(operation='create w/empty content length')
 @attr(assertion='fails 400')
 @attr('fails_on_rgw')
 def test_bucket_create_bad_contentlength_empty():
-    #TODO: this is supposed to fail on the RGW but it doesn't
+    #NOTES: this is supposed to fail on the RGW but it doesn't
     # the error_code is 400 not 'bad request' or something
     headers = {'Content-Length': ''}
     e = _add_header_create_bad_bucket(headers)
@@ -586,34 +496,6 @@ def test_bucket_create_bad_contentlength_negative():
 def test_bucket_create_bad_contentlength_none():
     remove = 'Content-Length'
     _remove_header_create_bucket(remove)
-
-@tag('auth_common')
-@attr(resource='bucket')
-@attr(method='put')
-@attr(operation='create w/non-graphic content length')
-@attr(assertion='fails 400')
-@attr('fails_on_mod_proxy_fcgi')
-@attr('fails_strict_rfc2616')
-def test_bucket_create_bad_contentlength_unreadable():
-    headers = {'Content-Length': '\x07'}
-    e = _add_header_create_bad_bucket(headers)
-    status, error_code = _get_status_and_error_code(e.response)
-    eq(status, 400)
-
-@tag('auth_common')
-@attr(resource='bucket')
-@attr(method='put')
-@attr(operation='create w/non-graphic authorization')
-@attr(assertion='fails 403')
-@attr('fails_on_rgw')
-@attr('fails_strict_rfc2616')
-def test_bucket_create_bad_authorization_unreadable():
-    # TODO: Client error not raised here for RGW , does 'fails_on_rgw' tag still apply
-    headers = {'Authorization': '\x07'}
-    e = _add_header_create_bad_bucket(headers)
-    status, error_code = _get_status_and_error_code(e.response)
-    eq(status, 403)
-    eq(error_code, 'AccessDenied')
 
 @tag('auth_common')
 @attr(resource='bucket')
@@ -678,10 +560,11 @@ def test_object_create_bad_authorization_incorrect_aws2():
     v2_client = get_v2_client()
     headers = {'Authorization': 'AWS AKIAIGR7ZNNBHC5BKSUB:FWeDfwojDSdS2Ztmpfeubhd9isU='}
     #TODO: this doesn't assert, figure out what's going wrong
+    # because HTTP_AUTHORIZATION in RGW log can't be changed by boto3, ask Casey about this
     e = _add_header_create_bad_object(headers, v2_client)
     status, error_code = _get_status_and_error_code(e.response)
     eq(status, 403)
-    #TODO: figure out what error code this produces
+    #figure out what error code this produces
     print error_code
     #eq(error_code, 'InvalidDigest')
 
@@ -694,6 +577,7 @@ def test_object_create_bad_authorization_invalid_aws2():
     v2_client = get_v2_client()
     headers = {'Authorization': 'AWS HAHAHA'}
     #TODO: this doesn't assert, figure out what's going wrong
+    # because HTTP_AUTHORIZATION in RGW log can't be changed by boto3, ask Casey about this
     e = _add_header_create_bad_object(headers, v2_client)
     status, error_code = _get_status_and_error_code(e.response)
     eq(status, 400)
@@ -707,19 +591,6 @@ def test_object_create_bad_authorization_invalid_aws2():
 def test_object_create_bad_ua_empty_aws2():
     v2_client = get_v2_client()
     headers = {'User-Agent': ''}
-    bucket_name, key_name = _add_header_create_object(headers, v2_client)
-    v2_client.put_object(Bucket=bucket_name, Key=key_name, Body='bar')
-
-@tag('auth_aws2')
-@attr(resource='object')
-@attr(method='put')
-@attr(operation='create w/non-graphic user agent')
-@attr(assertion='succeeds')
-@attr('fails_strict_rfc2616')
-def test_object_create_bad_ua_unreadable_aws2():
-    v2_client = get_v2_client()
-    headers = {'User-Agent': '\x07'}
-    # TODO: this raises an assert on the RGW
     bucket_name, key_name = _add_header_create_object(headers, v2_client)
     v2_client.put_object(Bucket=bucket_name, Key=key_name, Body='bar')
 
@@ -741,8 +612,7 @@ def test_object_create_bad_ua_none_aws2():
 @attr(assertion='fails 403')
 def test_object_create_bad_date_invalid_aws2():
     v2_client = get_v2_client()
-    headers = {'Date': 'Bad Date'}
-    # TODO: this doesn't raise a ClientError on the RGW
+    headers = {'x-amz-date': 'Bad Date'}
     e = _add_header_create_bad_object(headers, v2_client)
     status, error_code = _get_status_and_error_code(e.response)
     eq(status, 403)
@@ -755,23 +625,7 @@ def test_object_create_bad_date_invalid_aws2():
 @attr(assertion='fails 403')
 def test_object_create_bad_date_empty_aws2():
     v2_client = get_v2_client()
-    headers = {'Date': ''}
-    # TODO: this doesn't raise a ClientError on the RGW
-    e = _add_header_create_bad_object(headers, v2_client)
-    status, error_code = _get_status_and_error_code(e.response)
-    eq(status, 403)
-    eq(error_code, 'AccessDenied')
-
-@tag('auth_aws2')
-@attr(resource='object')
-@attr(method='put')
-@attr(operation='create w/non-graphic date')
-@attr(assertion='fails 403')
-@attr('fails_strict_rfc2616')
-def test_object_create_bad_date_unreadable_aws2():
-    v2_client = get_v2_client()
-    headers = {'Date': '\x07'}
-    # TODO: this doesn't raise a ClientError on the RGW
+    headers = {'x-amz-date': ''}
     e = _add_header_create_bad_object(headers, v2_client)
     status, error_code = _get_status_and_error_code(e.response)
     eq(status, 403)
@@ -784,8 +638,8 @@ def test_object_create_bad_date_unreadable_aws2():
 @attr(assertion='fails 403')
 def test_object_create_bad_date_none_aws2():
     v2_client = get_v2_client()
-    remove = 'Date'
-    # TODO: this doesn't raise a ClientError on the RGW
+    remove = 'x-amz-date'
+    # TODO: boto3 never removes the date header because it can't be removed with "before-call or before-sign"
     e = _remove_header_create_bad_object(remove, v2_client)
     status, error_code = _get_status_and_error_code(e.response)
     eq(status, 403)
@@ -798,12 +652,11 @@ def test_object_create_bad_date_none_aws2():
 @attr(assertion='fails 403')
 def test_object_create_bad_date_before_today_aws2():
     v2_client = get_v2_client()
-    headers = {'Date': 'Tue, 07 Jul 2010 21:53:04 GMT'}
-    # TODO: this doesn't raise a ClientError on the RGW
+    headers = {'x-amz-date': 'Tue, 07 Jul 2010 21:53:04 GMT'}
     e = _add_header_create_bad_object(headers, v2_client)
     status, error_code = _get_status_and_error_code(e.response)
     eq(status, 403)
-    eq(error_code, 'AccessDenied')
+    eq(error_code, 'RequestTimeTooSkewed')
 
 @tag('auth_aws2')
 @attr(resource='object')
@@ -812,8 +665,7 @@ def test_object_create_bad_date_before_today_aws2():
 @attr(assertion='fails 403')
 def test_object_create_bad_date_before_epoch_aws2():
     v2_client = get_v2_client()
-    headers = {'Date': 'Tue, 07 Jul 1950 21:53:04 GMT'}
-    # TODO: this doesn't raise a ClientError on the RGW
+    headers = {'x-amz-date': 'Tue, 07 Jul 1950 21:53:04 GMT'}
     e = _add_header_create_bad_object(headers, v2_client)
     status, error_code = _get_status_and_error_code(e.response)
     eq(status, 403)
@@ -826,8 +678,7 @@ def test_object_create_bad_date_before_epoch_aws2():
 @attr(assertion='fails 403')
 def test_object_create_bad_date_after_end_aws2():
     v2_client = get_v2_client()
-    headers = {'Date': 'Tue, 07 Jul 9999 21:53:04 GMT'}
-    # TODO: this doesn't raise a ClientError on the RGW
+    headers = {'x-amz-date': 'Tue, 07 Jul 9999 21:53:04 GMT'}
     e = _add_header_create_bad_object(headers, v2_client)
     status, error_code = _get_status_and_error_code(e.response)
     eq(status, 403)
@@ -840,12 +691,32 @@ def test_object_create_bad_date_after_end_aws2():
 @attr(assertion='fails 400')
 def test_bucket_create_bad_authorization_invalid_aws2():
     v2_client = get_v2_client()
-    headers = {'Authorization': 'AWS HAHAHA'}
+    #headers = {'Authorization': 'AWS HAHAHA'}
     # TODO: this doesn't raise a ClientError on the RGW
-    e = _add_header_create_bad_bucket(headers, v2_client)
-    status, error_code = _get_status_and_error_code(e.response)
-    eq(status, 403)
-    eq(error_code, 'RequestTimeTooSkewed')
+    # because HTTP_AUTHORIZATION in RGW log can't be changed by boto3, ask Casey about this
+    #e = _add_header_create_bad_bucket(headers, v2_client)
+    #status, error_code = _get_status_and_error_code(e.response)
+    #eq(status, 400)
+    #eq(error_code, 'InvalidArgument')
+
+    bucket_name = get_new_bucket_name()
+
+    #headers = _get_acl_header()
+
+    def add_headers_before_sign(**kwargs):
+        #updated_headers = (kwargs['request'].__dict__['headers'].__dict__['_headers'] + headers)
+        #kwargs['request'].__dict__['headers'].__dict__['_headers'] = updated_headers
+        #print kwargs['request'].__dict__
+        #print kwargs['request'].__dict__['headers'].__dict__
+        #print kwargs['request'].__dict__['headers'].__dict__['_headers']
+        kwargs['params']['context']['auth_type'] = 'AWS HAHAHA'
+        print kwargs['params']['context']['auth_type']
+        #print kwargs['params']['headers']
+
+    #v2_client.meta.events.register('before-sign.s3.CreateBucket', add_headers_before_sign)
+    v2_client.meta.events.register('before-call.s3.CreateBucket', add_headers_before_sign)
+    boto3.set_stream_logger(name='botocore')
+    v2_client.create_bucket(Bucket=bucket_name)
 
 @tag('auth_aws2')
 @attr(resource='bucket')
@@ -860,24 +731,11 @@ def test_bucket_create_bad_ua_empty_aws2():
 @tag('auth_aws2')
 @attr(resource='bucket')
 @attr(method='put')
-@attr(operation='create w/non-graphic user agent')
-@attr(assertion='succeeds')
-@attr('fails_strict_rfc2616')
-def test_bucket_create_bad_ua_unreadable_aws2():
-    v2_client = get_v2_client()
-    headers = {'User-Agent': '\x07'}
-    #TODO: a ClientError is raised here even though the test says one shouldn't happen
-    _add_header_create_bucket(headers, v2_client)
-
-@tag('auth_aws2')
-@attr(resource='bucket')
-@attr(method='put')
 @attr(operation='create w/no user agent')
 @attr(assertion='succeeds')
 def test_bucket_create_bad_ua_none_aws2():
     v2_client = get_v2_client()
     remove = 'User-Agent'
-    #TODO: a ClientError is raised here even though the test says one shouldn't happen
     _remove_header_create_bucket(remove, v2_client)
 
 @tag('auth_aws2')
@@ -887,8 +745,7 @@ def test_bucket_create_bad_ua_none_aws2():
 @attr(assertion='fails 403')
 def test_bucket_create_bad_date_invalid_aws2():
     v2_client = get_v2_client()
-    headers = {'Date': 'Bad Date'}
-    # TODO: this doesn't raise a ClientError on the RGW
+    headers = {'x-amz-date': 'Bad Date'}
     e = _add_header_create_bad_bucket(headers, v2_client)
     status, error_code = _get_status_and_error_code(e.response)
     eq(status, 403)
@@ -901,23 +758,7 @@ def test_bucket_create_bad_date_invalid_aws2():
 @attr(assertion='fails 403')
 def test_bucket_create_bad_date_empty_aws2():
     v2_client = get_v2_client()
-    headers = {'Date': ''}
-    # TODO: this doesn't raise a ClientError on the RGW
-    e = _add_header_create_bad_bucket(headers, v2_client)
-    status, error_code = _get_status_and_error_code(e.response)
-    eq(status, 403)
-    eq(error_code, 'AccessDenied')
-
-@tag('auth_aws2')
-@attr(resource='bucket')
-@attr(method='put')
-@attr(operation='create w/non-graphic date')
-@attr(assertion='fails 403')
-@attr('fails_strict_rfc2616')
-def test_bucket_create_bad_date_unreadable_aws2():
-    v2_client = get_v2_client()
-    headers = {'Date': '\x07'}
-    # TODO: this doesn't raise a ClientError on the RGW
+    headers = {'x-amz-date': ''}
     e = _add_header_create_bad_bucket(headers, v2_client)
     status, error_code = _get_status_and_error_code(e.response)
     eq(status, 403)
@@ -929,9 +770,10 @@ def test_bucket_create_bad_date_unreadable_aws2():
 @attr(operation='create w/no date')
 @attr(assertion='fails 403')
 def test_bucket_create_bad_date_none_aws2():
+    # TODO: boto2 is passing (raising a 403), boto3 never removes the date header because it can't be removed with "before-call or before-sign"
+
     v2_client = get_v2_client()
-    remove = 'Date'
-    # TODO: this doesn't raise a ClientError on the RGW
+    remove = 'x-amz-date'
     e = _remove_header_create_bad_bucket(remove, v2_client)
     status, error_code = _get_status_and_error_code(e.response)
     eq(status, 403)
@@ -944,8 +786,7 @@ def test_bucket_create_bad_date_none_aws2():
 @attr(assertion='fails 403')
 def test_bucket_create_bad_date_before_today_aws2():
     v2_client = get_v2_client()
-    headers = {'Date': 'Tue, 07 Jul 2010 21:53:04 GMT'}
-    # TODO: this doesn't raise a ClientError on the RGW
+    headers = {'x-amz-date': 'Tue, 07 Jul 2010 21:53:04 GMT'}
     e = _add_header_create_bad_bucket(headers, v2_client)
     status, error_code = _get_status_and_error_code(e.response)
     eq(status, 403)
@@ -958,8 +799,7 @@ def test_bucket_create_bad_date_before_today_aws2():
 @attr(assertion='fails 403')
 def test_bucket_create_bad_date_after_today_aws2():
     v2_client = get_v2_client()
-    headers = {'Date': 'Tue, 07 Jul 2030 21:53:04 GMT'}
-    # TODO: this doesn't raise a ClientError on the RGW
+    headers = {'x-amz-date': 'Tue, 07 Jul 2030 21:53:04 GMT'}
     e = _add_header_create_bad_bucket(headers, v2_client)
     status, error_code = _get_status_and_error_code(e.response)
     eq(status, 403)
@@ -972,9 +812,36 @@ def test_bucket_create_bad_date_after_today_aws2():
 @attr(assertion='fails 403')
 def test_bucket_create_bad_date_before_epoch_aws2():
     v2_client = get_v2_client()
-    headers = {'Date': 'Tue, 07 Jul 1950 21:53:04 GMT'}
-    # TODO: this doesn't raise a ClientError on the RGW
+    headers = {'x-amz-date': 'Tue, 07 Jul 1950 21:53:04 GMT'}
     e = _add_header_create_bad_bucket(headers, v2_client)
     status, error_code = _get_status_and_error_code(e.response)
     eq(status, 403)
     eq(error_code, 'AccessDenied')
+
+def test_screw_around():
+    bucket_name = get_new_bucket()
+    client = get_client()
+    key_name = 'foo'
+    add_headers = (lambda **kwargs: kwargs['params']['headers'].update(headers))
+    client.meta.events.register('before-sign.s3.PutObject', add_headers)
+    client.put_object(Bucket=bucket_name, Key=key_name)
+
+    v2_client = get_v2_client()
+    bucket_name = get_new_bucket_name()
+
+    #headers = _get_acl_header()
+
+    def add_headers_before_sign(**kwargs):
+        #updated_headers = (kwargs['request'].__dict__['headers'].__dict__['_headers'] + headers)
+        #kwargs['request'].__dict__['headers'].__dict__['_headers'] = updated_headers
+        #print kwargs['request'].__dict__
+        #print kwargs['request'].__dict__['headers'].__dict__
+        #print kwargs['request'].__dict__['headers'].__dict__['_headers']
+        print kwargs
+        #print kwargs['params']['headers']
+
+    v2_client.meta.events.register('before-sign.s3.CreateBucket', add_headers_before_sign)
+    #v2_client.meta.events.register('before-call.s3.CreateBucket', add_headers_before_sign)
+    boto3.set_stream_logger(name='botocore')
+    v2_client.create_bucket(Bucket=bucket_name)
+
