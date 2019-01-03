@@ -38,3 +38,12 @@ def generate_random(size, part_size=5*1024*1024):
         yield s
         if (x == size):
             return
+
+def _get_status(response):
+    status = response['ResponseMetadata']['HTTPStatusCode']
+    return status
+
+def _get_status_and_error_code(response):
+    status = response['ResponseMetadata']['HTTPStatusCode']
+    error_code = response['Error']['Code']
+    return status, error_code

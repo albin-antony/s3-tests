@@ -32,6 +32,8 @@ from email.header import decode_header
 
 from .utils import assert_raises
 from .utils import generate_random
+from .utils import _get_status_and_error_code
+from .utils import _get_status
 
 from .policy import Policy, Statement, make_json_policy
 
@@ -627,15 +629,6 @@ def test_bucket_list_maxkeys_none():
     keys = _get_keys(response)
     eq(keys, key_names)
     eq(response['MaxKeys'], 1000)
-
-def _get_status(response):
-    status = response['ResponseMetadata']['HTTPStatusCode']
-    return status
-
-def _get_status_and_error_code(response):
-    status = response['ResponseMetadata']['HTTPStatusCode']
-    error_code = response['Error']['Code']
-    return status, error_code
 
 @attr(resource='bucket')
 @attr(method='get')
