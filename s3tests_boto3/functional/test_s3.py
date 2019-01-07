@@ -2871,15 +2871,14 @@ def test_bucket_head_extended():
     client = get_client()
 
     response = client.head_bucket(Bucket=bucket_name)
-    #TODO: check to see if strings for values is ok
-    eq(response['ResponseMetadata']['HTTPHeaders']['x-rgw-object-count'], '0')
-    eq(response['ResponseMetadata']['HTTPHeaders']['x-rgw-bytes-used'], '0')
+    eq(int(response['ResponseMetadata']['HTTPHeaders']['x-rgw-object-count']), 0)
+    eq(int(response['ResponseMetadata']['HTTPHeaders']['x-rgw-bytes-used']), 0)
 
     _create_objects(bucket_name=bucket_name, keys=['foo','bar','baz'])
     response = client.head_bucket(Bucket=bucket_name)
 
-    eq(response['ResponseMetadata']['HTTPHeaders']['x-rgw-object-count'], '3')
-    eq(response['ResponseMetadata']['HTTPHeaders']['x-rgw-bytes-used'], '9')
+    eq(int(response['ResponseMetadata']['HTTPHeaders']['x-rgw-object-count']), 3)
+    eq(int(response['ResponseMetadata']['HTTPHeaders']['x-rgw-bytes-used']), 9)
 
 @attr(resource='bucket.acl')
 @attr(method='get')
@@ -2920,9 +2919,7 @@ def test_object_raw_authenticated():
 @attr(method='get')
 @attr(operation='authenticated on private bucket/private object with modified response headers')
 @attr(assertion='succeeds')
-@attr('fails_on_rgw')
 def test_object_raw_response_headers():
-    # TODO: this suddenly passes on the rgw, run the boto2 versions on the RGW
     bucket_name = _setup_bucket_object_acl('private', 'private')
 
     client = get_client()
@@ -4613,7 +4610,6 @@ def test_bucket_header_acl_grants():
     alt_client.put_object(Bucket=bucket_name, Key='foo', Body='bar')
 
     # set bucket acl to public-read-write so that teardown can work
-    # TODO: rewrite teardown code to make it so I don't need to reset this
     alt_client.put_bucket_acl(Bucket=bucket_name, ACL='public-read-write')
     
 
@@ -5787,7 +5783,6 @@ def _check_content_using_range(key, bucket_name, data, step):
 @attr(method='put')
 @attr(operation='complete multi-part upload')
 @attr(assertion='successful')
-#TODO: ask casey if fails_on_aws is necessary
 @attr('fails_on_aws')
 def test_multipart_upload():
     bucket_name = get_new_bucket()
@@ -5944,9 +5939,7 @@ def test_multipart_upload_multiple_sizes():
     client.complete_multipart_upload(Bucket=bucket_name, Key=key, UploadId=upload_id, MultipartUpload={'Parts': parts})
     
 @attr(assertion='successful')
-@attr('fails_on_rgw')
 def test_multipart_copy_multiple_sizes():
-    # TODO: this suddenly passes on the rgw, run the boto2 versions on the RGW
     src_key = 'foo'
     src_bucket_name = _create_key_with_random_content(src_key, 12*1024*1024)
 
@@ -6231,7 +6224,7 @@ def test_100_continue():
     port = get_config_port()
     is_secure = get_config_is_secure()
 
-    #TODO: Make this test work when is_secure is True
+    #NOTES: this test needs to be tested when is_secure is True
     status = _simple_http_req_100_cont(host, port, is_secure, 'PUT', resource)
     eq(status, '403')
 
@@ -9177,18 +9170,8 @@ def test_bucket_policy_set_condition_operator_end_with_IfExists():
       }
      ]
     }''' % bucket_name
+    boto3.set_stream_logger(name='botocore')
     client.put_bucket_policy(Bucket=bucket_name, Policy=policy)
-
-    request_headers={'referer': 'http://example.com'}
-
-    lf = (lambda **kwargs: kwargs['params']['headers'].update(request_headers))
-    client.meta.events.register('before-call.s3.GetObject', lf)
-
-    # TODO: Ask why this is not a 403 and is succeeding. The correct header seems to be there
-    # DEBUGGING: Compare rgw log output from boto2 and boto3, ask Adam if I can't figure it out
-    e = assert_raises(ClientError, client.get_object, Bucket=bucket_name, Key=key)
-    status, error_code = _get_status_and_error_code(e.response)
-    eq(status, 403)
 
     request_headers={'referer': 'http://www.example.com/'}
 
@@ -9206,8 +9189,19 @@ def test_bucket_policy_set_condition_operator_end_with_IfExists():
     response = client.get_object(Bucket=bucket_name, Key=key)
     eq(response['ResponseMetadata']['HTTPStatusCode'], 200)
 
-    response = client.get_object(Bucket=bucket_name, Key=key)
-    eq(response['ResponseMetadata']['HTTPStatusCode'], 200)
+    # the 'referer' headers need to be removed for this one 
+    #response = client.get_object(Bucket=bucket_name, Key=key)
+    #eq(response['ResponseMetadata']['HTTPStatusCode'], 200)
+
+    request_headers={'referer': 'http://example.com'}
+
+    lf = (lambda **kwargs: kwargs['params']['headers'].update(request_headers))
+    client.meta.events.register('before-call.s3.GetObject', lf)
+
+    # TODO: Compare Requests sent in Boto3, Wireshark, RGW Log for both boto and boto3
+    e = assert_raises(ClientError, client.get_object, Bucket=bucket_name, Key=key)
+    status, error_code = _get_status_and_error_code(e.response)
+    eq(status, 403)
 
     response =  client.get_bucket_policy(Bucket=bucket_name)
     print response
@@ -9444,7 +9438,6 @@ def test_post_object_tags_anonymous_request():
     input_tagset = _create_simple_tagset(2)
     # xml_input_tagset is the same as input_tagset in xml.
     # There is not a simple way to change input_tagset to xml like there is in the boto2 tetss
-    # TODO (later): figure out how to not hard code thise
     xml_input_tagset = "<Tagging><TagSet><Tag><Key>0</Key><Value>0</Value></Tag><Tag><Key>1</Key><Value>1</Value></Tag></TagSet></Tagging>"
 
 
@@ -9490,7 +9483,6 @@ def test_post_object_tags_authenticated_request():
 
     # xml_input_tagset is the same as `input_tagset = _create_simple_tagset(2)` in xml
     # There is not a simple way to change input_tagset to xml like there is in the boto2 tetss
-    # TODO (later): figure out how to not hard code thise
     xml_input_tagset = "<Tagging><TagSet><Tag><Key>0</Key><Value>0</Value></Tag><Tag><Key>1</Key><Value>1</Value></Tag></TagSet></Tagging>"
 
     json_policy_document = json.JSONEncoder().encode(policy_document)
