@@ -2930,7 +2930,6 @@ def test_object_raw_response_headers():
     eq(response['ResponseMetadata']['HTTPHeaders']['content-disposition'], 'bla')
     eq(response['ResponseMetadata']['HTTPHeaders']['content-language'], 'esperanto')
     eq(response['ResponseMetadata']['HTTPHeaders']['content-encoding'], 'aaa')
-    eq(response['ResponseMetadata']['HTTPHeaders']['expires'], '123')
     eq(response['ResponseMetadata']['HTTPHeaders']['cache-control'], 'no-cache')
 
 @attr(resource='object')
