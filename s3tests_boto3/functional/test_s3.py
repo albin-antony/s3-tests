@@ -8225,6 +8225,8 @@ def test_encrypted_transfer_13b():
     _test_encryption_sse_customer_write(13)
 
 
+@attr(assertion='success')
+@attr('encryption')
 def test_encryption_sse_c_method_head():
     bucket_name = get_new_bucket()
     client = get_client()
@@ -8656,6 +8658,8 @@ def test_encryption_sse_c_post_object_authenticated_request():
     body = _get_body(response)
     eq(body, 'bar')
 
+@attr(assertion='success')
+@attr('encryption')
 def _test_sse_kms_customer_write(file_size, key_id = 'testkey-1'):
     """
     Tests Create a file of A's, use it to set_contents_from_file.
